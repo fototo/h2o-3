@@ -6,13 +6,19 @@ import water.*;
 import water.api.schemas3.GridExportV3;
 import water.api.schemas3.GridImportV3;
 import water.api.schemas3.KeyV3;
+import water.fvec.Frame;
+import water.fvec.persist.FramePersist;
+import water.fvec.persist.PersistUtils;
 import water.persist.Persist;
 import water.util.FileUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.Map;
 import java.util.Objects;
+
+import static hex.grid.Grid.FRAMES_META_FILE_SUFFIX;
 
 public class GridImportExportHandler extends Handler {
 
@@ -33,6 +39,13 @@ public class GridImportExportHandler extends Handler {
     validateGridImportParameters(gridImportV3);
 
     final URI gridUri = FileUtils.getURI(gridImportV3.grid_path);
+    if (!PersistUtils.exists(gridUri)) {
+      throw new IllegalArgumentException("File not found " + gridUri);
+    }
+    final URI gridFramesUri = FileUtils.getURI(gridImportV3.grid_path + FRAMES_META_FILE_SUFFIX);
+    if (gridImportV3.load_frames && !PersistUtils.exists(gridFramesUri)) {
+      throw new IllegalArgumentException("Requested to load with data frames, but the grid was saved without frames.");
+    }
     final Persist persist = H2O.getPM().getPersistForURI(gridUri);
     try (final InputStream inputStream = persist.open(gridUri.toString())) {
       final AutoBuffer gridAutoBuffer = new AutoBuffer(inputStream);
@@ -44,6 +57,9 @@ public class GridImportExportHandler extends Handler {
 
       final String gridDirectory = persist.getParent(gridUri.toString());
       loadGridModels(grid, gridDirectory);
+      if (gridImportV3.load_frames) {
+        loadGridFrames(gridDirectory, gridFramesUri);
+      }
       DKV.put(grid);
       return new KeyV3.GridKeyV3(grid._key);
     }
@@ -64,6 +80,9 @@ public class GridImportExportHandler extends Handler {
     final Grid serializedGrid = (Grid) possibleGrid;
     serializedGrid.exportBinary(gridExportV3.grid_directory);
     serializedGrid.exportModelsBinary(gridExportV3.grid_directory);
+    if (gridExportV3.save_frames) {
+      serializedGrid.exportFramesBinary(gridExportV3.grid_directory);
+    }
 
     return new KeyV3.GridKeyV3(serializedGrid._key);
   }
@@ -104,5 +123,10 @@ public class GridImportExportHandler extends Handler {
       final Model<?, ?, ?> model = Model.importBinaryModel(gridDirectory + "/" + k.toString());
       assert model != null;
     }
+  }
+  
+  private static void loadGridFrames(final String gridDirectory, final URI gridFramesUri) {
+    Map<String, Key<Frame>> framesMap = PersistUtils.read(gridFramesUri, AutoBuffer::get);
+    framesMap.values().forEach(key -> FramePersist.loadFrom(key, gridDirectory));
   }
 }
