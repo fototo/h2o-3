@@ -1,6 +1,7 @@
 package hex.grid;
 
 import hex.*;
+import hex.faulttolerance.Recovery;
 import hex.grid.HyperSpaceWalker.BaseWalker;
 import jsr166y.CountedCompleter;
 import water.*;
@@ -458,7 +459,7 @@ public final class GridSearch<MP extends Model.Parameters> extends Keyed<GridSea
   private void beforeGridStart(Grid grid) {
     if (_exportFrames) {
       attemptGridSave(grid);
-      grid.exportReferencesBinary(_hyperSpaceWalker.getParams()._export_checkpoints_dir);
+      new Recovery<Grid>(_hyperSpaceWalker.getParams()._export_checkpoints_dir).exportReferences(grid);
     }
   }
   

@@ -1,17 +1,16 @@
 package hex.grid;
 
 import hex.*;
+import hex.faulttolerance.Recoverable;
 import water.*;
 import water.api.schemas3.KeyV3;
 import water.fvec.Frame;
-import water.fvec.persist.FramePersist;
 import water.fvec.persist.PersistUtils;
 import water.util.*;
 import water.util.PojoUtils.FieldNaming;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
-import java.lang.reflect.Field;
 import java.net.URI;
 import java.util.*;
 
@@ -24,7 +23,7 @@ import static hex.grid.GridSearch.IGNORED_FIELDS_PARAM_HASH;
  *
  * @param <MP> type of model build parameters
  */
-public class Grid<MP extends Model.Parameters> extends Lockable<Grid<MP>> implements ModelContainer<Model> {
+public class Grid<MP extends Model.Parameters> extends Lockable<Grid<MP>> implements ModelContainer<Model>, Recoverable<Grid<MP>> {
 
   /**
    * Publicly available Grid prototype - used by REST API.
@@ -32,8 +31,6 @@ public class Grid<MP extends Model.Parameters> extends Lockable<Grid<MP>> implem
    * @see hex.schemas.GridSchemaV99
    */
   public static final Grid GRID_PROTO = new Grid(null, null, null, null);
-
-  public static final String REFERENCES_META_FILE_SUFFIX = "_references";
 
   // A cache of double[] hyper-parameters mapping to Models.
   private final IcedHashMap<IcedLong, Key<Model>> _models = new IcedHashMap<>();
@@ -535,69 +532,26 @@ public class Grid<MP extends Model.Parameters> extends Lockable<Grid<MP>> implem
     }
   }
 
-  @SuppressWarnings("rawtypes")
-  private Set<Key> getDependentKeysFromParams() {
-    Field[] fields = Weaver.getWovenFields(getParams().getClass());
-    Set<Key> values = new HashSet<>();
-    for (Field f : fields) {
-      f.setAccessible(true);
-      Class<?> c = f.getType();
-      try {
-        Object value = f.get(getParams());
-        if (value instanceof Key) {
-          values.add((Key) value);
-        } else if (value != null && c.isArray() && c.getComponentType() == Key.class) {
-          Key[] arr = (Key[]) value;
-          for (Key k : arr) 
-            if (k != null) values.add(k);
-        }
-      } catch (IllegalAccessException e) {
-        throw new RuntimeException(e);
-      }
+  /**
+   * Imports models referenced by this grid from given directory.
+   *
+   * @param exportDir Directory to import the models from.
+   * @throws IOException Error importing the models
+   */
+  public void importModelsBinary(final String exportDir) throws IOException {
+    for (Key<Model> k : _models.values()) {
+      final Model<?, ?, ?> model = Model.importBinaryModel(exportDir + "/" + k.toString());
+      assert model != null;
     }
-    return values;
-  }
-  
-  private Job persistObj(
-      final Keyed o,
-      final String exportDir,
-      Map<String, String> referenceKeyTypeMap
-  ) {
-    if (o instanceof Frame) {
-      referenceKeyTypeMap.put(o._key.toString(), "frame");
-      return new FramePersist((Frame) o).saveTo(exportDir, true);
-    } else if (o != null) {
-      referenceKeyTypeMap.put(o._key.toString(), "iced");
-      URI dest = FileUtils.getURI(exportDir + "/" + o._key);
-      PersistUtils.write(dest, ab -> ab.putKey(o._key));
-    }
-    return null;
   }
 
-  /**
-   * Saves all of the keyed objects used by this Grid's params. Files are named by objects' keys.
-   *
-   * @param exportDir directory to export all the frames to
-   */
-  public void exportReferencesBinary(final String exportDir) {
-    final Set<Key> keys = getDependentKeysFromParams();
-    final IcedHashMap<String, String> referenceKeyTypeMap = new IcedHashMap<>();
-    keys.stream()
-        .map(Key::get)
-        .map(obj -> persistObj(obj, exportDir, referenceKeyTypeMap))
-        .forEach(job -> {
-          if (job == null) return;
-          job.get(); // Wait for the persist operation ot complete.
-          if (job.isCrashed()) {
-            throw new RuntimeException("Unable to export frame " + job.get()._key, job.ex());
-          }
-        });
-    final String framesFilePath = exportDir + "/" + _key + REFERENCES_META_FILE_SUFFIX;
-    final URI framesUri = FileUtils.getURI(framesFilePath);
-    PersistUtils.write(framesUri, ab -> ab.put(referenceKeyTypeMap));
+  @Override
+  public Set<Key<?>> getDependentKeys() {
+    return _params.getDependentKeys();
   }
 
   public MP getParams() {
     return _params;
   }
+
 }

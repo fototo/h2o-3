@@ -1,6 +1,7 @@
 package hex.grid;
 
 import hex.Model;
+import hex.faulttolerance.Recovery;
 import hex.genmodel.utils.DistributionFamily;
 import hex.tree.gbm.GBMModel;
 import org.junit.Before;
@@ -277,6 +278,56 @@ public class GridTest extends TestUtil {
   }
 
   @Test
+  public void gridSearchExportCheckpointsDirWithFrames() throws IOException {
+    try {
+      Scope.enter();
+
+      final Frame trainingFrame = parse_test_file("smalldata/iris/iris_train.csv");
+      Scope.track(trainingFrame);
+
+      HashMap<String, Object[]> hyperParms = new HashMap<String, Object[]>() {{
+        put("_distribution", new DistributionFamily[]{DistributionFamily.multinomial});
+        put("_ntrees", new Integer[]{5});
+        put("_max_depth", new Integer[]{2});
+        put("_learn_rate", new Double[]{.7});
+      }};
+
+      GBMModel.GBMParameters params = new GBMModel.GBMParameters();
+      params._train = trainingFrame._key;
+      params._response_column = "species";
+      params._export_checkpoints_dir = temporaryFolder.newFolder().getAbsolutePath();
+
+      Job<Grid> gs = GridSearch.startGridSearch(
+          null, params, hyperParms,
+          new GridSearch.SimpleParametersBuilderFactory<>(),
+          new HyperSpaceSearchCriteria.CartesianSearchCriteria(),
+          true, GridSearch.SEQUENTIAL_MODEL_BUILDING
+      );
+      Scope.track_generic(gs);
+      final Grid originalGrid = gs.get();
+      Scope.track_generic(originalGrid);
+      Key<Model>[] originalKeys = originalGrid.getModelKeys();
+      originalGrid.remove();
+      trainingFrame.remove();
+      assertNull("models should be removed from dkv as well", originalKeys[0].get());
+
+      final File serializedGridFile = new File(params._export_checkpoints_dir, originalGrid._key.toString());
+      assertTrue(serializedGridFile.isFile());
+
+      final Grid grid = loadGridFromFile(serializedGridFile);
+      DKV.put(grid);
+      grid.importModelsBinary(params._export_checkpoints_dir);
+      new Recovery<Grid>(params._export_checkpoints_dir).loadReferences(grid);
+      assertArrayEquals("models are not reloaded with the grid", originalKeys, grid.getModelKeys());
+      assertNotNull("training frame was not reloaded with the grid", trainingFrame._key.get());
+      assertNotNull("models should loaded back into dkv", originalKeys[0].get());
+      Scope.track_generic(grid);
+    } finally {
+      Scope.exit();
+    }
+  }
+
+  @Test
   public void gridSearchManualExport() throws IOException {
     try {
       Scope.enter();
@@ -348,8 +399,6 @@ public class GridTest extends TestUtil {
       final Grid grid = loadGridFromFile(serializedGridFile);
       assertArrayEquals(originalGrid.getModelKeys(), grid.getModelKeys());
       Scope.track_generic(grid);
-      
-      
     } finally {
       Scope.exit();
     }

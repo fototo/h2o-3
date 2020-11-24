@@ -518,6 +518,29 @@ public abstract class Model<M extends Model<M,P,O>, P extends Model.Parameters, 
       xs ^= (train() == null ? 43 : train().checksum()) * (valid() == null ? 17 : valid().checksum());
       return xs;
     }
+
+    @SuppressWarnings("rawtypes")
+    public Set<Key<?>> getDependentKeys() {
+      Field[] fields = Weaver.getWovenFields(getClass());
+      Set<Key<?>> values = new HashSet<>();
+      for (Field f : fields) {
+        f.setAccessible(true);
+        Class<?> c = f.getType();
+        try {
+          Object value = f.get(this);
+          if (value instanceof Key) {
+            values.add((Key) value);
+          } else if (value != null && c.isArray() && c.getComponentType() == Key.class) {
+            Key[] arr = (Key[]) value;
+            for (Key k : arr)
+              if (k != null) values.add(k);
+          }
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException(e);
+        }
+      }
+      return values;
+    }
   }
 
   public ModelMetrics addModelMetrics(final ModelMetrics mm) {

@@ -47,7 +47,7 @@ def test_gbm():
     df["Weights"] = h2o.H2OFrame.from_python(abs(np.random.randn(df.nrow, 1)).tolist())[0]
     train, calib = df.split_frame(ratios=[.8], destination_frames=["eco_train", "eco_calib"], seed=42)
     params = {
-        "distribution": "bernoulli", "min_rows":10, "max_depth":5,
+        "distribution": "bernoulli", "min_rows": 10, "max_depth": 5,
         "weights_column": "Weights",
         "calibrate_model": True, "calibration_frame": calib
     }

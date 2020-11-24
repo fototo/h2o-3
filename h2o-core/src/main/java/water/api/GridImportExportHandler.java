@@ -1,12 +1,12 @@
 package water.api;
 
 import hex.Model;
+import hex.faulttolerance.Recovery;
 import hex.grid.Grid;
 import water.*;
 import water.api.schemas3.GridExportV3;
 import water.api.schemas3.GridImportV3;
 import water.api.schemas3.KeyV3;
-import water.fvec.persist.FramePersist;
 import water.fvec.persist.PersistUtils;
 import water.persist.Persist;
 import water.util.FileUtils;
@@ -14,10 +14,9 @@ import water.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.util.Map;
 import java.util.Objects;
 
-import static hex.grid.Grid.REFERENCES_META_FILE_SUFFIX;
+import static hex.faulttolerance.Recovery.REFERENCES_META_FILE_SUFFIX;
 
 public class GridImportExportHandler extends Handler {
 
@@ -55,9 +54,9 @@ public class GridImportExportHandler extends Handler {
       final Grid grid = (Grid) freezable;
 
       final String gridDirectory = persist.getParent(gridUri.toString());
-      loadGridModels(grid, gridDirectory);
+      grid.importModelsBinary(gridDirectory);
       if (gridImportV3.load_frames) {
-        loadGridReferences(gridDirectory, gridFramesUri);
+        new Recovery<Grid>(gridDirectory).loadReferences(grid);
       }
       DKV.put(grid);
       return new KeyV3.GridKeyV3(grid._key);
@@ -80,7 +79,7 @@ public class GridImportExportHandler extends Handler {
     serializedGrid.exportBinary(gridExportV3.grid_directory);
     serializedGrid.exportModelsBinary(gridExportV3.grid_directory);
     if (gridExportV3.save_frames) {
-      serializedGrid.exportReferencesBinary(gridExportV3.grid_directory);
+      new Recovery<Grid>(gridExportV3.grid_directory).exportReferences(serializedGrid);
     }
 
     return new KeyV3.GridKeyV3(serializedGrid._key);
@@ -117,20 +116,4 @@ public class GridImportExportHandler extends Handler {
     }
   }
 
-  private static void loadGridModels(final Grid grid, final String gridDirectory) throws IOException {
-    for (Key<Model> k : grid.getModelKeys()) {
-      final Model<?, ?, ?> model = Model.importBinaryModel(gridDirectory + "/" + k.toString());
-      assert model != null;
-    }
-  }
-  
-  private static void loadGridReferences(final String gridDirectory, final URI gridReferencesUri) {
-    Map<String, String> referencesMap = PersistUtils.read(gridReferencesUri, AutoBuffer::get);
-    final Futures fs = new Futures();
-    referencesMap.forEach((key, type) -> {
-      if ("frame".equals(type)) FramePersist.loadFrom(Key.make(key), gridDirectory).get();
-      else PersistUtils.read(URI.create(gridDirectory + "/" + key), ab -> ab.getKey(Key.make(key), fs));
-    });
-    fs.blockForPending();
-  }
 }
