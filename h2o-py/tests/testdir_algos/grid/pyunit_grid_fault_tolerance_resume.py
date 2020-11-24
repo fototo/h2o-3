@@ -182,7 +182,7 @@ def test_glrm():
         "regularization_y": "NonNegative"
     }
     hyper_params = {
-        "transform": ["NONE", "DEMEAN", "DESCALE", "STANDARDIZE"],
+        "transform": ["NONE", "DEMEAN"],
         "gamma_x": [0.1, 1],
         "gamma_y": [0.2, 2]
     }
@@ -324,7 +324,7 @@ def grid_ft_resume_test():
     test_dl()
     test_gbm()
     test_glm()
-    # test_glrm()  # fails to load glrm model metrics
+    test_glrm()
     test_kmeans()
     test_xgboost()
 
