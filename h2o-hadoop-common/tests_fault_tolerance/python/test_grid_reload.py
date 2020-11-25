@@ -27,9 +27,10 @@ class GridReloadTest(unittest.TestCase):
             "learn_rate": learn_rate_opts,
             "ntrees": ntrees_opts
         }
-        
+
+        cluster_1_name = "grid1-py"
         try:
-            cluster_1 = utils.start_cluster("grid1-py")
+            cluster_1 = utils.start_cluster(cluster_1_name)
             h2o.connect(url=cluster_1)
             train = h2o.import_file(path="hdfs://%s%s" % (name_node, dataset))
             grid = H2OGridSearch(
@@ -53,10 +54,11 @@ class GridReloadTest(unittest.TestCase):
             print("done sleeping")
             h2o.connection().close()
         finally:
-            utils.stop_cluster("grid1-py")
-        
+            utils.stop_cluster(cluster_1_name)
+
+        cluster_2_name = "grid2-py"
         try:
-            cluster_2 = utils.start_cluster("grid2-py")
+            cluster_2 = utils.start_cluster(cluster_2_name)
             h2o.connect(url=cluster_2)
             loaded = h2o.load_grid("%s/%s" % (work_dir, grid_id), load_frames=True)
             loaded_train = h2o.H2OFrame.get_frame(train.frame_id)
@@ -72,7 +74,7 @@ class GridReloadTest(unittest.TestCase):
             self.assertEqual(len(loaded.model_ids), grid_size, "The full grid was not trained.")
             h2o.connection().close()
         finally:
-            utils.stop_cluster("grid2-py")
+            utils.stop_cluster(cluster_2_name)
 
 
 if __name__ == '__main__':
