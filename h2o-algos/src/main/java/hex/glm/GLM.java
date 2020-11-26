@@ -63,7 +63,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
   public int[][] _gamColIndices = null; // corresponding column indices in dataInfo
   public static int _totalBetaLen;
   private boolean _earlyStopEnabled = false;
-  List<Integer> _scoreIterationList = new ArrayList<Integer>(); // keep track of iteration where scoring occurs
+//  List<Integer> _scoreIterationList = new ArrayList<Integer>(); // keep track of iteration where scoring occurs
   private boolean _checkPointFirstIter = false;  // indicate first iteration for checkpoint model
 
   public GLM(boolean startup_once){super(new GLMParameters(),startup_once);}
@@ -937,7 +937,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     int numRows = sHist.getRowDim();
     for (int rowInd = 0; rowInd < numRows; rowInd++) {  // if lambda_search is enabled, _sc is not updated
       _sc._scoringIters.add((Integer) sHist.get(rowInd, colIndices[0]));
-      _scoreIterationList.add((Integer) sHist.get(rowInd, colIndices[0]));
+//      _scoreIterationList.add((Integer) sHist.get(rowInd, colIndices[0]));
       _sc._scoringTimes.add(fmt.parseMillis((String) sHist.get(rowInd, colIndices[1])));
       _sc._likelihoods.add((Double) sHist.get(rowInd, colIndices[2]));
       _sc._objectives.add((Double) sHist.get(rowInd, colIndices[3]));
@@ -2138,7 +2138,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     }
     
     private void scorePostProcessing(Frame train, long t1) {
-      _scoreIterationList.add(_state._iter);
+//      _scoreIterationList.add(_state._iter);
       ModelMetrics mtrain = ModelMetrics.getFromDKV(_model, train); // updated by model.scoreAndUpdateModel
       long t2 = System.currentTimeMillis();
       if (_parms._lambda_search)
@@ -2421,7 +2421,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       TwoDimTable scoring_history_early_stop = ScoringInfo.createScoringHistoryTable(_model.getScoringInfo(),
               (null != _parms._valid), false, _model._output.getModelCategory(), false);
       _model._output._scoring_history = combineScoringHistory(_model._output._scoring_history,
-              scoring_history_early_stop, _scoreIterationList);
+              scoring_history_early_stop, (_parms._lambda_search ? _lsc._lambdaIters : _sc._scoringIters));
       _model._output._varimp = _model._output.calculateVarimp();
       _model._output._variable_importances = calcVarImp(_model._output._varimp);
       _model.update(_job._key);
